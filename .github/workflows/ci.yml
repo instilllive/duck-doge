@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  forge:
+    name: forge build, test, coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: 1.8.7
+
+      - name: Build
+        run: forge build
+
+      - name: Test
+        run: forge test -vv
+
+      - name: Coverage
+        run: >
+          forge coverage
+          --report summary
+          --report lcov
+          --lcov-version 2
+          --exclude-tests
+          --no-match-coverage script
+
+      - name: Require 100% mint, pause, and withdraw coverage
+        run: python3 ci/check_skin_coverage.py lcov.info

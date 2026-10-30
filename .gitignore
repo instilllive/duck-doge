@@ -147,3 +147,10 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Foundry
+out/
+cache/
+broadcast/
+.env
+lcov.info
