@@ -8,22 +8,34 @@ import {
   getAddress,
   http,
   isAddress,
+  toHex,
   zeroAddress,
 } from "viem";
 import { skinsAbi, vouchAbi } from "./abi.js";
 import {
   CHAIN_ID,
   CHAIN_ID_HEX,
+  CHALLENGE_TTL_MS,
   EARNED_SKINS,
   EXPLORER_URL,
   KINDS,
   PAID_SKINS,
   REQUEST_SECONDS,
+  ROTATE_MS,
   RPC_URL,
   skinsAddress,
   vouchAddress,
 } from "./config.js";
-import { buildVouchTypedData, decodePayload, encodePayload, hashNote } from "./payload.js";
+import {
+  buildVouchTypedData,
+  challengeIsLive,
+  decodeDogPayload,
+  decodePayload,
+  encodeDogPayload,
+  encodePayload,
+  hashNote,
+  rememberChallenges,
+} from "./payload.js";
 import { ownedEntries, selectWornSkin } from "./worn.js";
 
 const dogeosTestnet = defineChain({
@@ -40,8 +52,13 @@ const state = {
   account: "",
   provider: null,
   timer: 0,
+  dogTimer: 0,
+  duckTimer: 0,
+  signing: false,
   stopScan: null,
   scanned: null,
+  dogCard: null,
+  challenges: [],
 };
 
 const $ = (id) => document.querySelector(id);
@@ -134,6 +151,7 @@ async function connect() {
   renderAccount();
   $("#connect").textContent = "Connected";
   setStatus(`Connected on DogeOS Chikyū testnet.`);
+  if (!$("#dog").hidden) startDogLoop();
   provider.removeListener?.("accountsChanged", onAccountsChanged);
   provider.on?.("accountsChanged", onAccountsChanged);
   refreshWeekly();
@@ -145,32 +163,100 @@ function onAccountsChanged(accounts) {
   refreshWeekly();
 }
 
-async function signRequest() {
-  if (!state.account) {
-    setStatus("Connect a wallet first.", "bad");
+function randomBytes32() {
+  return toHex(crypto.getRandomValues(new Uint8Array(32)));
+}
+
+function acceptDogCard(text) {
+  let card;
+  try {
+    card = decodeDogPayload(text.trim());
+  } catch (error) {
+    state.dogCard = null;
+    $("#scanned-dog").textContent = "";
+    setStatus(describeError(error), "bad");
     return;
   }
-  if (!configured(vouchAddress)) {
-    setStatus("The vouch contract address is not set yet.", "bad");
-    return;
-  }
+  state.dogCard = card;
+  $("#scanned-dog").textContent = `Dog ${card.address}`;
+  setStatus("Dog scanned. Start the live QR while you are still together.");
+}
+
+async function signOnce() {
+  if (!state.account) throw new Error("Connect a wallet first.");
+  if (!state.dogCard) throw new Error("Scan the dog's QR first.");
+  if (!configured(vouchAddress)) throw new Error("The vouch contract address is not set yet.");
   await ensureChain(state.provider);
-  const kind = Number($("#kind").value);
-  const noteHash = hashNote($("#note").value);
   const deadline = BigInt(Math.floor(Date.now() / 1000) + REQUEST_SECONDS);
-  const nonceBytes = crypto.getRandomValues(new Uint8Array(32));
-  const nonce = nonceBytes.reduce((value, byte) => (value << 8n) + BigInt(byte), 0n);
-  const request = { vouchee: state.account, kind, noteHash, nonce, deadline };
+  const request = {
+    voucher: state.dogCard.address,
+    vouchee: state.account,
+    kind: Number($("#kind").value),
+    noteHash: hashNote($("#note").value),
+    challenge: state.dogCard.challenge,
+    nonce: BigInt(randomBytes32()),
+    deadline,
+  };
   const typed = buildVouchTypedData({ chainId: CHAIN_ID, verifyingContract: vouchAddress, request });
   const signature = await walletClient().signTypedData(typed);
   const payload = encodePayload({ chainId: CHAIN_ID, verifyingContract: vouchAddress, request, signature });
   const url = await QRCode.toDataURL(payload, { errorCorrectionLevel: "L", margin: 1, width: 280 });
   const img = $("#qr");
   img.src = url;
-  img.alt = "Vouch request QR";
+  img.alt = "Live vouch request QR";
   img.hidden = false;
   startCountdown(deadline);
-  setStatus(noteHash === hashNote("") ? "QR ready. No note." : "QR ready. The note text stays on this screen.");
+}
+
+async function rotateDuck() {
+  if (state.signing) return;
+  state.signing = true;
+  try {
+    await signOnce();
+  } catch (error) {
+    stopDuckLoop();
+    setStatus(describeError(error), "bad");
+  } finally {
+    state.signing = false;
+  }
+}
+
+function startDuckLoop() {
+  stopDuckLoop();
+  rotateDuck();
+  state.duckTimer = window.setInterval(rotateDuck, ROTATE_MS);
+}
+
+function stopDuckLoop() {
+  window.clearInterval(state.duckTimer);
+  state.duckTimer = 0;
+}
+
+async function rotateDog() {
+  if (!state.account) return;
+  const challenge = randomBytes32();
+  state.challenges = rememberChallenges(state.challenges, challenge, Date.now(), CHALLENGE_TTL_MS);
+  const payload = encodeDogPayload({ address: state.account, challenge });
+  const url = await QRCode.toDataURL(payload, { errorCorrectionLevel: "L", margin: 1, width: 280 });
+  const img = $("#dog-qr");
+  img.src = url;
+  img.alt = "Live dog challenge QR";
+  img.hidden = false;
+  $("#dog-challenge").textContent = "Challenge rotates every 5 seconds.";
+}
+
+function startDogLoop() {
+  stopDogLoop();
+  if (!state.account) return;
+  rotateDog().catch((error) => setStatus(describeError(error), "bad"));
+  state.dogTimer = window.setInterval(() => {
+    rotateDog().catch((error) => setStatus(describeError(error), "bad"));
+  }, ROTATE_MS);
+}
+
+function stopDogLoop() {
+  window.clearInterval(state.dogTimer);
+  state.dogTimer = 0;
 }
 
 function startCountdown(deadline) {
@@ -232,6 +318,24 @@ function showScanned(text) {
     setStatus("This QR is for a different vouch contract.", "bad");
     return;
   }
+  if (!state.account) {
+    state.scanned = null;
+    $("#preview").hidden = true;
+    setStatus("Connect the dog's wallet first.", "bad");
+    return;
+  }
+  if (getAddress(decoded.request.voucher) !== state.account) {
+    state.scanned = null;
+    $("#preview").hidden = true;
+    setStatus("This QR names a different dog.", "bad");
+    return;
+  }
+  if (!challengeIsLive(state.challenges, decoded.request.challenge, Date.now(), CHALLENGE_TTL_MS)) {
+    state.scanned = null;
+    $("#preview").hidden = true;
+    setStatus("That challenge is not one this dog is showing. Ask the duck to scan again.", "bad");
+    return;
+  }
   state.scanned = decoded;
   const kind = KINDS.find((item) => item.id === decoded.request.kind);
   $("#preview-kind").textContent = kind ? kind.name : `Kind ${decoded.request.kind}`;
@@ -240,16 +344,15 @@ function showScanned(text) {
   const left = Number(decoded.request.deadline) - Math.floor(Date.now() / 1000);
   $("#preview-time").textContent = left < 0 ? "This request is already expired." : `${left}s left on the deadline.`;
   $("#preview").hidden = false;
-  setStatus("QR read. Check the duck, then stamp.");
+  setStatus("Duck QR matches this dog. Submit the paw stamp.");
 }
 
-async function startScan() {
+async function startScan(video, onText) {
   if (!navigator.mediaDevices?.getUserMedia) {
     setStatus("This browser has no camera API. Paste the payload instead.", "bad");
     return;
   }
   stopScan();
-  const video = $("#camera");
   const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
   video.srcObject = stream;
   video.hidden = false;
@@ -267,7 +370,7 @@ async function startScan() {
       const code = jsQR(image.data, image.width, image.height);
       if (code?.data) {
         stopScan();
-        showScanned(code.data);
+        onText(code.data);
         return;
       }
     }
@@ -283,13 +386,15 @@ async function startScan() {
 function stopScan() {
   state.stopScan?.();
   state.stopScan = null;
-  const video = $("#camera");
-  const stream = video.srcObject;
-  if (stream) {
-    for (const track of stream.getTracks()) track.stop();
+  for (const video of [$("#camera"), $("#duck-camera")]) {
+    if (!video) continue;
+    const stream = video.srcObject;
+    if (stream) {
+      for (const track of stream.getTracks()) track.stop();
+    }
+    video.srcObject = null;
+    video.hidden = true;
   }
-  video.srcObject = null;
-  video.hidden = true;
 }
 
 async function submitVouch() {
@@ -441,13 +546,26 @@ function showTab(name) {
   for (const button of document.querySelectorAll(".tabs button")) {
     button.classList.toggle("active", button.dataset.tab === name);
   }
-  if (name !== "dog") stopScan();
+  stopScan();
+  if (name === "dog") startDogLoop();
+  else stopDogLoop();
+  if (name !== "duck") stopDuckLoop();
 }
 
 function bind() {
   $("#connect").addEventListener("click", () => connect().catch((error) => setStatus(describeError(error), "bad")));
-  $("#sign").addEventListener("click", () => signRequest().catch((error) => setStatus(describeError(error), "bad")));
-  $("#scan").addEventListener("click", () => startScan().catch((error) => setStatus(describeError(error), "bad")));
+  $("#sign").addEventListener("click", () => startDuckLoop());
+  $("#stop-sign").addEventListener("click", () => {
+    stopDuckLoop();
+    setStatus("Live QR stopped.");
+  });
+  $("#scan-dog").addEventListener("click", () =>
+    startScan($("#duck-camera"), acceptDogCard).catch((error) => setStatus(describeError(error), "bad")),
+  );
+  $("#read-dog").addEventListener("click", () => acceptDogCard($("#dog-paste").value));
+  $("#scan").addEventListener("click", () =>
+    startScan($("#camera"), showScanned).catch((error) => setStatus(describeError(error), "bad")),
+  );
   $("#read-paste").addEventListener("click", () => showScanned($("#paste").value));
   $("#submit").addEventListener("click", () => submitVouch().catch((error) => setStatus(describeError(error), "bad")));
   $("#revoke-form").addEventListener("submit", (event) => {

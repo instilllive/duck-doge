@@ -19,9 +19,10 @@ import {DuckDogeSkins} from "./DuckDogeSkins.sol";
 ///      transferable cosmetic and may already have moved. A later vouch for
 ///      the same pair does not mint another one.
 ///
-///      Co-presence is weak on purpose. The signature does not name the dog,
-///      so anyone who relays a still-valid QR can submit it first. The 90
-///      second deadline only limits how long that window stays open.
+///      The duck's signature names the dog (`voucher`) and includes the dog's
+///      live challenge. Only that dog can submit, and only while the deadline
+///      is inside a 20 second window. That raises the bar for relaying a
+///      screenshot. It still does not prove two humans were in the same place.
 contract DuckDogeVouch is EIP712 {
     enum Kind {
         MetInPerson,
@@ -29,11 +30,14 @@ contract DuckDogeVouch is EIP712 {
         KnowsWell
     }
 
-    /// @notice What the duck signs. `noteHash` may be zero when there is no note.
+    /// @notice What the duck signs. `voucher` is the dog. `challenge` is the
+    ///         random value from that dog's live QR. `noteHash` may be zero.
     struct VouchRequest {
+        address voucher;
         address vouchee;
         Kind kind;
         bytes32 noteHash;
+        bytes32 challenge;
         uint256 nonce;
         uint256 deadline;
     }
@@ -63,11 +67,13 @@ contract DuckDogeVouch is EIP712 {
     uint256 public constant MAX_VOUCHES_PER_WEEK = 3;
 
     /// @notice Latest `deadline` the contract will accept, measured from `block.timestamp`.
-    /// @dev The page aims at 60 seconds. The extra 30 seconds is inclusion slack.
-    uint256 public constant MAX_DEADLINE_WINDOW = 90 seconds;
+    /// @dev The page signs for 15 seconds and refreshes about every 5. The
+    ///      extra 5 seconds is inclusion slack.
+    uint256 public constant MAX_DEADLINE_WINDOW = 20 seconds;
 
-    bytes32 private constant VOUCH_REQUEST_TYPEHASH =
-        keccak256("VouchRequest(address vouchee,uint8 kind,bytes32 noteHash,uint256 nonce,uint256 deadline)");
+    bytes32 private constant VOUCH_REQUEST_TYPEHASH = keccak256(
+        "VouchRequest(address voucher,address vouchee,uint8 kind,bytes32 noteHash,bytes32 challenge,uint256 nonce,uint256 deadline)"
+    );
 
     event Vouched(
         address indexed voucher, address indexed vouchee, Kind kind, bytes32 noteHash, uint256 nonce, uint256 timestamp
@@ -79,6 +85,7 @@ contract DuckDogeVouch is EIP712 {
     error Expired(uint256 deadline, uint256 currentTime);
     error DeadlineTooFar(uint256 deadline, uint256 maxDeadline);
     error BadSignature();
+    error WrongVoucher();
     error SelfVouch();
     error NonceUsed(uint256 nonce);
     error DuplicateVouch();
@@ -114,6 +121,7 @@ contract DuckDogeVouch is EIP712 {
 
         address signer = ECDSA.recoverCalldata(_hashTypedDataV4(_hashRequest(request)), voucheeSignature);
         if (signer != request.vouchee) revert BadSignature();
+        if (msg.sender != request.voucher) revert WrongVoucher();
         if (msg.sender == request.vouchee) revert SelfVouch();
 
         if (_usedNonce[request.vouchee][request.nonce]) revert NonceUsed(request.nonce);
@@ -202,7 +210,14 @@ contract DuckDogeVouch is EIP712 {
     function _hashRequest(VouchRequest calldata request) internal pure returns (bytes32) {
         return keccak256(
             abi.encode(
-                VOUCH_REQUEST_TYPEHASH, request.vouchee, request.kind, request.noteHash, request.nonce, request.deadline
+                VOUCH_REQUEST_TYPEHASH,
+                request.voucher,
+                request.vouchee,
+                request.kind,
+                request.noteHash,
+                request.challenge,
+                request.nonce,
+                request.deadline
             )
         );
     }

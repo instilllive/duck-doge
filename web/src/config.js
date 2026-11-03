@@ -3,7 +3,9 @@ export const CHAIN_ID = 6281971;
 export const CHAIN_ID_HEX = "0x5fdaf3";
 export const RPC_URL = "https://rpc.testnet.dogeos.com/";
 export const EXPLORER_URL = "https://dogeos-testnet.l2scan.co";
-export const REQUEST_SECONDS = 60;
+export const REQUEST_SECONDS = 15;
+export const ROTATE_MS = 5000;
+export const CHALLENGE_TTL_MS = 20000;
 
 export const vouchAddress = "0x0000000000000000000000000000000000000000";
 export const skinsAddress = "0x0000000000000000000000000000000000000000";

@@ -20,20 +20,23 @@ OpenZeppelin Ownable includes `renounceOwnership`. Renouncing would leave the pa
 
 `DuckDogeVouch` records that one wallet vouches for another. There is no transfer function, no proxy, no upgrade path, no `delegatecall`, no `selfdestruct`, and no owner. Paid skins are not read. Holding a shop skin does not change whether a vouch succeeds.
 
-The duck is the person asking. The dog is the person vouching.
+The duck is the person asking. The dog is the person vouching. Both phones have to scan each other.
 
-1. The duck signs an EIP-712 `VouchRequest` `{vouchee, kind, noteHash, nonce, deadline}`. `kind` is `MetInPerson` (0), `WorkedWith` (1), or `KnowsWell` (2). `noteHash` may be zero. The page uses a 60 second deadline.
-2. The duck shows that signed request as a QR code.
-3. The dog scans it and submits `vouch(request, voucheeSignature)` from the dog's own wallet.
+1. The dog shows a live QR of their address and a fresh random challenge. It changes about every 5 seconds. The page keeps challenges from the last 20 seconds.
+2. The duck scans that QR, then signs an EIP-712 `VouchRequest` `{voucher, vouchee, kind, noteHash, challenge, nonce, deadline}`. `voucher` is the dog. `challenge` is the value just scanned. `kind` is `MetInPerson` (0), `WorkedWith` (1), or `KnowsWell` (2). `noteHash` may be zero. The deadline is 15 seconds, and the page signs a new request about every 5 seconds.
+3. The dog scans that live QR and submits `vouch(request, voucheeSignature)` from the dog's own wallet before the deadline.
 
 The contract accepts the request only when all of these hold:
 
-- `deadline` has not passed, and `deadline <= block.timestamp + 90 seconds`. The extra 30 seconds past the 60 second QR is inclusion slack.
+- `deadline` has not passed, and `deadline <= block.timestamp + 20 seconds`.
 - The signature recovers to `vouchee` for this contract and chain.
+- `msg.sender` is `request.voucher`. A different wallet cannot submit a signature that names someone else.
 - `msg.sender` is not `vouchee`.
 - The nonce has not been used by that vouchee.
 - The dog does not already have an active vouch for that duck.
 - The dog has created fewer than 3 vouches in the current epoch week.
+
+The dog's page also refuses a duck QR whose challenge is not one it has shown in the last 20 seconds. The contract does not store challenges. The signature binds the challenge, and the short deadline is what the chain enforces.
 
 The first successful vouch for a pair mints one earned skin to the duck. The index is `lifetimeReceived % earnedSkinCount`, then the lifetime counter increments. Lifetime counts first-time pairs only, so the ids cycle as more distinct dogs vouch for the same duck. A revoked pair can be vouched again, but that second vouch does not mint another skin.
 
@@ -51,7 +54,9 @@ The earned skin stays. It is an ordinary transferable ERC-1155. The duck may alr
 
 ### Co-presence
 
-The QR and the short deadline are a weak co-presence check. A scanned code can be relayed, and the signature does not name the dog, so the first wallet to submit a still-valid payload is stored as the voucher. That is the accepted testnet tradeoff. This is not proof that two humans met.
+This handshake raises the bar. Both cameras have to work, the window is measured in seconds, and there are two round trips: the duck scans the dog, then the dog scans the duck. The signature names the dog, so a forwarded screenshot cannot be submitted by a third wallet. A picture of either QR is stale within about 15 seconds.
+
+It still cannot cryptographically prove that two humans were in the same place. Two people on a video call can scan each other's screens inside the window. A relay that forwards both QRs within those seconds can still finish the handshake. A later native app could add NFC or BLE proximity on top of this signature. This testnet build does not.
 
 ## Tests
 
@@ -141,7 +146,7 @@ Paste the two logged addresses into `web/src/config.js` as `skinsAddress` and `v
 
 ## Web
 
-`web/` is a static Vite page. Duck mode connects an injected wallet (MyDoge or MetaMask), picks a kind, optionally types a note, signs the EIP-712 request, and shows a QR that counts down from 60 seconds. Dog mode scans that QR with the camera, or accepts a paste when the browser has no camera, shows the vouchee and the kind, and submits `vouch`. Profile reads `activeVouchCount`, `balancesOf`, and `earnedBalancesOf` for any address. The duck and dog drawings wear the first earned skin that address holds, otherwise the first shop skin.
+`web/` is a static Vite page. Dog mode connects an injected wallet (MyDoge or MetaMask) and shows a QR of that address plus a challenge, rotating about every 5 seconds. Duck mode scans that QR, then re-signs and re-renders a 15-second request on the same cadence. The wallet asks for each signature. Dog mode scans the duck's QR, checks that it names this dog and a challenge still on screen, and submits `vouch`. Profile reads `activeVouchCount`, `balancesOf`, and `earnedBalancesOf` for any address. The duck and dog drawings wear the first earned skin that address holds, otherwise the first shop skin.
 
 ```bash
 cd web

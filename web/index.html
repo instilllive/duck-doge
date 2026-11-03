@@ -19,9 +19,9 @@
     </header>
 
     <p class="warn">
-      Testnet only. The QR and the one-minute deadline are a weak co-presence check.
-      Anyone who relays the code before it expires can submit it. The signature does
-      not name the dog, so the first wallet to send it is the voucher.
+      Testnet only. Both phones show a QR that changes about every 5 seconds, and the
+      duck's signature names the dog. A screenshot goes stale before it can be relayed.
+      This still cannot prove two people are standing together.
     </p>
     <p id="deploy-note" class="note"></p>
 
@@ -34,7 +34,15 @@
     <section id="duck" class="panel">
       <div class="copy">
         <h1>The duck asks</h1>
-        <p>Sign a short request and show the QR. The dog scans it and submits the vouch.</p>
+        <p>Scan the dog's live QR. This page then signs a fresh request about every 5 seconds. Each one expires in 15 seconds and names that dog.</p>
+        <button id="scan-dog" type="button">Scan the dog</button>
+        <video id="duck-camera" playsinline muted hidden></video>
+        <label>
+          Or paste the dog's QR payload
+          <textarea id="dog-paste" rows="3" spellcheck="false"></textarea>
+        </label>
+        <button id="read-dog" type="button">Read dog QR</button>
+        <p id="scanned-dog" class="account"></p>
         <label>
           Kind
           <select id="kind">
@@ -47,8 +55,9 @@
           Note, optional
           <input id="note" type="text" maxlength="140" placeholder="Only a hash goes in the QR" />
         </label>
-        <button id="sign" type="button">Sign and show QR</button>
-        <p class="fine">The countdown uses this device's clock. The contract allows up to 90 seconds.</p>
+        <button id="sign" type="button">Start live QR</button>
+        <button id="stop-sign" type="button">Stop</button>
+        <p class="fine">The wallet asks for a signature on each refresh. The countdown uses this device's clock. The contract allows at most 20 seconds.</p>
       </div>
       <figure class="stage">
         <svg class="creature duck" viewBox="0 0 128 150" role="img" aria-label="Duck">
@@ -68,9 +77,9 @@
     <section id="dog" class="panel" hidden>
       <div class="copy">
         <h1>The dog stamps</h1>
-        <p>Scan the duck's QR with the camera, check who it is, then send the vouch from this wallet.</p>
+        <p>Show your live QR. The duck scans it, signs your address and challenge, then you scan their QR back and submit.</p>
         <p id="weekly" class="fine"></p>
-        <button id="scan" type="button">Open camera</button>
+        <button id="scan" type="button">Scan the duck</button>
         <video id="camera" playsinline muted hidden></video>
         <label>
           Or paste the QR payload
@@ -95,6 +104,8 @@
         </form>
       </div>
       <figure class="stage">
+        <img id="dog-qr" alt="" hidden />
+        <p id="dog-challenge" class="fine"></p>
         <svg class="creature dog" viewBox="0 0 128 150" role="img" aria-label="Dog">
           <ellipse class="coat" cx="74" cy="102" rx="38" ry="26" />
           <circle class="coat" cx="42" cy="72" r="22" />

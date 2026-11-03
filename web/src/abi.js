@@ -8,9 +8,11 @@ export const vouchAbi = [
         name: "request",
         type: "tuple",
         components: [
+          { name: "voucher", type: "address" },
           { name: "vouchee", type: "address" },
           { name: "kind", type: "uint8" },
           { name: "noteHash", type: "bytes32" },
+          { name: "challenge", type: "bytes32" },
           { name: "nonce", type: "uint256" },
           { name: "deadline", type: "uint256" },
         ],
