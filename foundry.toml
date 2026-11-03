@@ -1,0 +1,19 @@
+[profile.default]
+src = "contracts/src"
+test = "contracts/test"
+script = "contracts/script"
+out = "out"
+libs = ["lib"]
+solc = "0.8.30"
+evm_version = "prague"
+optimizer = false
+remappings = [
+    "forge-std/=lib/forge-std/src/",
+    "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+]
+
+[rpc_endpoints]
+dogeos_chikyu_testnet = "https://rpc.testnet.dogeos.com"
+
+[profile.default.coverage]
+lcov_version = "2"

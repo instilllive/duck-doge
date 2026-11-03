@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>duck doge vouches</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div>
+        <p class="brand">duck doge</p>
+        <p class="net">DogeOS Chikyū testnet · chain 6281971</p>
+      </div>
+      <div class="wallet">
+        <button id="connect" type="button">Connect MyDoge or MetaMask</button>
+        <p id="account" class="account">Not connected</p>
+      </div>
+    </header>
+
+    <p class="warn">
+      Testnet only. Both phones show a QR that changes about every 5 seconds, and the
+      duck's signature names the dog. A screenshot goes stale before it can be relayed.
+      This still cannot prove two people are standing together.
+    </p>
+    <p id="deploy-note" class="note"></p>
+
+    <nav class="tabs">
+      <button type="button" data-tab="duck" class="active">Duck asks</button>
+      <button type="button" data-tab="dog">Dog stamps</button>
+      <button type="button" data-tab="profile">Profile</button>
+    </nav>
+
+    <section id="duck" class="panel">
+      <div class="copy">
+        <h1>The duck asks</h1>
+        <p>Scan the dog's live QR. This page then signs a fresh request about every 5 seconds. Each one expires in 15 seconds and names that dog.</p>
+        <button id="scan-dog" type="button">Scan the dog</button>
+        <video id="duck-camera" playsinline muted hidden></video>
+        <label>
+          Or paste the dog's QR payload
+          <textarea id="dog-paste" rows="3" spellcheck="false"></textarea>
+        </label>
+        <button id="read-dog" type="button">Read dog QR</button>
+        <p id="scanned-dog" class="account"></p>
+        <label>
+          Kind
+          <select id="kind">
+            <option value="0">Met in person</option>
+            <option value="1">Worked with</option>
+            <option value="2">Knows well</option>
+          </select>
+        </label>
+        <label>
+          Note, optional
+          <input id="note" type="text" maxlength="140" placeholder="Only a hash goes in the QR" />
+        </label>
+        <button id="sign" type="button">Start live QR</button>
+        <button id="stop-sign" type="button">Stop</button>
+        <p class="fine">The wallet asks for a signature on each refresh. The countdown uses this device's clock. The contract allows at most 20 seconds.</p>
+      </div>
+      <figure class="stage">
+        <svg class="creature duck" viewBox="0 0 128 150" role="img" aria-label="Duck">
+          <ellipse class="coat" cx="58" cy="98" rx="36" ry="28" />
+          <circle class="coat" cx="88" cy="64" r="22" />
+          <polygon points="106,60 126,68 106,76" fill="#e07a1f" />
+          <circle cx="94" cy="58" r="3" fill="#241c14" />
+          <ellipse class="wing" cx="48" cy="100" rx="14" ry="10" />
+          <ellipse cx="42" cy="128" rx="10" ry="5" fill="#e07a1f" />
+          <ellipse cx="66" cy="128" rx="10" ry="5" fill="#e07a1f" />
+        </svg>
+        <img id="qr" alt="" hidden />
+        <p id="countdown" class="countdown"></p>
+      </figure>
+    </section>
+
+    <section id="dog" class="panel" hidden>
+      <div class="copy">
+        <h1>The dog stamps</h1>
+        <p>Show your live QR. The duck scans it, signs your address and challenge, then you scan their QR back and submit.</p>
+        <p id="weekly" class="fine"></p>
+        <button id="scan" type="button">Scan the duck</button>
+        <video id="camera" playsinline muted hidden></video>
+        <label>
+          Or paste the QR payload
+          <textarea id="paste" rows="4" spellcheck="false"></textarea>
+        </label>
+        <button id="read-paste" type="button">Read pasted payload</button>
+        <div id="preview" class="preview" hidden>
+          <p id="preview-kind"></p>
+          <p id="preview-who" class="account"></p>
+          <p id="preview-note" class="fine"></p>
+          <p id="preview-time"></p>
+          <button id="submit" type="button">Give a paw stamp</button>
+        </div>
+        <form id="revoke-form">
+          <h2>Take a stamp back</h2>
+          <p class="fine">Revoke clears your vouch. It does not take the earned skin back.</p>
+          <label>
+            Vouchee
+            <input id="revoke-who" type="text" spellcheck="false" placeholder="0x…" />
+          </label>
+          <button type="submit">Revoke</button>
+        </form>
+      </div>
+      <figure class="stage">
+        <img id="dog-qr" alt="" hidden />
+        <p id="dog-challenge" class="fine"></p>
+        <svg class="creature dog" viewBox="0 0 128 150" role="img" aria-label="Dog">
+          <ellipse class="coat" cx="74" cy="102" rx="38" ry="26" />
+          <circle class="coat" cx="42" cy="72" r="22" />
+          <ellipse class="coat" cx="26" cy="58" rx="8" ry="14" />
+          <ellipse cx="30" cy="80" rx="10" ry="7" fill="#f3e2cf" />
+          <circle cx="26" cy="80" r="3" fill="#241c14" />
+          <circle cx="36" cy="66" r="3" fill="#241c14" />
+          <circle class="coat paw" cx="98" cy="120" r="12" />
+          <circle cx="92" cy="114" r="3" fill="#f3e2cf" />
+          <circle cx="104" cy="114" r="3" fill="#f3e2cf" />
+          <circle cx="98" cy="124" r="3" fill="#f3e2cf" />
+        </svg>
+      </figure>
+    </section>
+
+    <section id="profile" class="panel" hidden>
+      <div class="copy">
+        <h1>Profile</h1>
+        <p>
+          Active vouches are the ones still in effect. Earned skins were minted when a vouch
+          was first recorded. Revoking does not burn them.
+        </p>
+        <label>
+          Address
+          <input id="lookup" type="text" spellcheck="false" placeholder="0x…" />
+        </label>
+        <button id="load" type="button">Load profile</button>
+        <p id="vouch-count" class="count"></p>
+        <h2>Shop skins</h2>
+        <div id="paid-tags" class="tags"></div>
+        <h2>Earned skins</h2>
+        <div id="earned-tags" class="tags"></div>
+      </div>
+      <figure class="stage pair">
+        <svg class="creature duck" viewBox="0 0 128 150" role="img" aria-label="Duck wearing skins">
+          <ellipse class="coat" cx="58" cy="98" rx="36" ry="28" />
+          <circle class="coat" cx="88" cy="64" r="22" />
+          <polygon points="106,60 126,68 106,76" fill="#e07a1f" />
+          <circle cx="94" cy="58" r="3" fill="#241c14" />
+          <ellipse class="wing" cx="48" cy="100" rx="14" ry="10" />
+          <ellipse cx="42" cy="128" rx="10" ry="5" fill="#e07a1f" />
+          <ellipse cx="66" cy="128" rx="10" ry="5" fill="#e07a1f" />
+        </svg>
+        <svg class="creature dog" viewBox="0 0 128 150" role="img" aria-label="Dog wearing skins">
+          <ellipse class="coat" cx="74" cy="102" rx="38" ry="26" />
+          <circle class="coat" cx="42" cy="72" r="22" />
+          <ellipse class="coat" cx="26" cy="58" rx="8" ry="14" />
+          <ellipse cx="30" cy="80" rx="10" ry="7" fill="#f3e2cf" />
+          <circle cx="26" cy="80" r="3" fill="#241c14" />
+          <circle cx="36" cy="66" r="3" fill="#241c14" />
+          <circle class="coat paw" cx="98" cy="120" r="12" />
+          <circle cx="92" cy="114" r="3" fill="#f3e2cf" />
+          <circle cx="104" cy="114" r="3" fill="#f3e2cf" />
+          <circle cx="98" cy="124" r="3" fill="#f3e2cf" />
+        </svg>
+        <figcaption id="worn-label">No skin yet</figcaption>
+      </figure>
+    </section>
+
+    <p id="status" class="status" role="status"></p>
+    <p id="tx" class="fine"></p>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
