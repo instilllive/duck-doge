@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Fail unless mint, pause, unpause, and withdraw are fully covered.
+"""Fail unless the paid-mint path and the earned-skin minter path are fully covered.
 
 Reads a Foundry LCOV report (lcov 2 function ranges). A function passes when
 every instrumented line and branch in that range was executed at least once.
-The DuckDogeSkins.sol record must pass the same way, so a gap outside those
-four functions still fails the gate.
+The DuckDogeSkins.sol record must pass the same way, so a gap outside the
+named functions still fails the gate. `setMinter` and `mintEarned` are the
+free-mint path: a non-minter, a second set, and a bad index all have to run.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-REQUIRED = ("mint", "pause", "unpause", "withdraw")
+REQUIRED = ("mint", "pause", "unpause", "withdraw", "setMinter", "mintEarned", "earnedBalancesOf")
 
 
 def parse_lcov(text: str) -> list[dict]:
@@ -119,7 +120,10 @@ def main() -> int:
         print(f"| {name} | {percent(line_hit, line_total)} | {percent(branch_hit, branch_total)} |")
 
     if failed:
-        print("coverage gate failed: mint, pause, unpause, and withdraw need 100% lines and branches")
+        print(
+            "coverage gate failed: mint, pause, unpause, withdraw, setMinter, "
+            "mintEarned, and earnedBalancesOf need 100% lines and branches"
+        )
         return 1
     print("coverage gate passed")
     return 0

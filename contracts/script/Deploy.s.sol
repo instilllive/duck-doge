@@ -14,8 +14,12 @@ contract Deploy is Script {
     /// @dev Testnet cosmetic price: 0.01 DOGE. DogeOS DOGE uses 18 decimals.
     uint256 internal constant TESTNET_MINT_PRICE = 0.01 ether;
 
-    /// @dev Skin ids for this deployment are 0..7.
+    /// @dev Paid skin ids for this deployment are 0..7.
     uint256 internal constant TESTNET_SKIN_COUNT = 8;
+
+    /// @dev Earned skin ids are 8..11. This script does not set the minter;
+    ///      DeployVouch deploys both contracts and calls setMinter once.
+    uint256 internal constant TESTNET_EARNED_SKIN_COUNT = 4;
 
     /// @dev Placeholder metadata URI. Change this constant in the script
     ///      before broadcasting if the host changes. The contract has no setter.
@@ -23,12 +27,16 @@ contract Deploy is Script {
 
     function run() external {
         vm.startBroadcast();
-        DuckDogeSkins skins = new DuckDogeSkins(TESTNET_MINT_PRICE, TESTNET_SKIN_COUNT, TESTNET_URI, msg.sender);
+        DuckDogeSkins skins = new DuckDogeSkins(
+            TESTNET_MINT_PRICE, TESTNET_SKIN_COUNT, TESTNET_EARNED_SKIN_COUNT, TESTNET_URI, msg.sender
+        );
         vm.stopBroadcast();
 
         console2.log("DuckDogeSkins", address(skins));
         console2.log("owner", skins.owner());
         console2.log("mintPrice", skins.MINT_PRICE());
         console2.log("skinCount", skins.skinCount());
+        console2.log("earnedSkinCount", skins.earnedSkinCount());
+        console2.log("minter", skins.minter());
     }
 }

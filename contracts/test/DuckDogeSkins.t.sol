@@ -25,13 +25,14 @@ contract DuckDogeSkinsTest is Test {
     event Paused(address account);
     event Unpaused(address account);
     event Withdrawn(address indexed to, uint256 amount);
+    event MinterSet(address indexed minter);
 
     DuckDogeSkins internal skins;
     address internal owner = makeAddr("owner");
     address internal player = makeAddr("player");
 
     function setUp() public {
-        skins = new DuckDogeSkins(PRICE, SKIN_COUNT, "ipfs://duck-doge/{id}.json", owner);
+        skins = new DuckDogeSkins(PRICE, SKIN_COUNT, 0, "ipfs://duck-doge/{id}.json", owner);
         vm.deal(player, 10 ether);
         vm.deal(owner, 1 ether);
 
@@ -43,12 +44,12 @@ contract DuckDogeSkinsTest is Test {
 
     function test_constructor_revertsOnZeroPrice() public {
         vm.expectRevert(DuckDogeSkins.ZeroMintPrice.selector);
-        new DuckDogeSkins(0, SKIN_COUNT, "", owner);
+        new DuckDogeSkins(0, SKIN_COUNT, 0, "", owner);
     }
 
     function test_constructor_revertsOnZeroSkinCount() public {
         vm.expectRevert(DuckDogeSkins.ZeroSkinCount.selector);
-        new DuckDogeSkins(PRICE, 0, "", owner);
+        new DuckDogeSkins(PRICE, 0, 0, "", owner);
     }
 
     function test_mint_success_updatesBalanceAndEmits() public {
@@ -234,7 +235,7 @@ contract DuckDogeSkinsTest is Test {
 
     function test_withdraw_revertsWhenOwnerRejects() public {
         RejectingOwner rejector = new RejectingOwner();
-        DuckDogeSkins local = new DuckDogeSkins(PRICE, SKIN_COUNT, "", address(rejector));
+        DuckDogeSkins local = new DuckDogeSkins(PRICE, SKIN_COUNT, 0, "", address(rejector));
 
         vm.prank(player);
         local.mint{value: PRICE * 3}(0, 3);
@@ -272,6 +273,90 @@ contract DuckDogeSkinsTest is Test {
         uint256[] memory whilePaused = skins.balancesOf(player);
         assertEq(whilePaused[0], 1);
         assertEq(whilePaused[SKIN_COUNT - 1], 2);
+    }
+
+    function test_earnedBalancesOf_isEmptyWhenNoneExist() public view {
+        assertEq(skins.earnedSkinCount(), 0);
+        assertEq(skins.minter(), address(0));
+        uint256[] memory earned = skins.earnedBalancesOf(player);
+        assertEq(earned.length, 0);
+    }
+
+    function test_setMinter_onceAndMintEarnedOnlyByMinter() public {
+        uint256 earnedCount = 2;
+        DuckDogeSkins local = new DuckDogeSkins(PRICE, SKIN_COUNT, earnedCount, "", owner);
+        address minter = makeAddr("minter");
+
+        vm.prank(player);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, player));
+        local.setMinter(minter);
+        assertEq(local.minter(), address(0));
+
+        vm.prank(owner);
+        vm.expectRevert(DuckDogeSkins.ZeroMinter.selector);
+        local.setMinter(address(0));
+        assertEq(local.minter(), address(0));
+
+        vm.prank(owner);
+        vm.expectEmit(true, false, false, true, address(local));
+        emit MinterSet(minter);
+        local.setMinter(minter);
+        assertEq(local.minter(), minter);
+
+        vm.prank(owner);
+        vm.expectRevert(DuckDogeSkins.MinterAlreadySet.selector);
+        local.setMinter(player);
+        assertEq(local.minter(), minter);
+
+        vm.prank(player);
+        vm.expectRevert(abi.encodeWithSelector(DuckDogeSkins.NotMinter.selector, player));
+        local.mintEarned(player, 0);
+
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(DuckDogeSkins.NotMinter.selector, owner));
+        local.mintEarned(player, 0);
+        assertEq(local.balanceOf(player, SKIN_COUNT), 0);
+
+        vm.prank(minter);
+        vm.expectRevert(abi.encodeWithSelector(DuckDogeSkins.InvalidEarnedSkin.selector, earnedCount));
+        local.mintEarned(player, earnedCount);
+
+        uint256 held = address(local).balance;
+        vm.prank(minter);
+        vm.expectEmit(true, true, true, true, address(local));
+        emit TransferSingle(minter, address(0), player, SKIN_COUNT, 1);
+        local.mintEarned(player, 0);
+        assertEq(address(local).balance, held);
+        assertEq(local.balanceOf(player, SKIN_COUNT), 1);
+        assertEq(local.balanceOf(player, SKIN_COUNT + 1), 0);
+
+        vm.prank(player);
+        vm.expectRevert(abi.encodeWithSelector(DuckDogeSkins.InvalidSkin.selector, SKIN_COUNT));
+        local.mint{value: PRICE}(SKIN_COUNT, 1);
+        assertEq(player.balance, 10 ether);
+        assertEq(local.balanceOf(player, SKIN_COUNT), 1);
+
+        vm.prank(owner);
+        local.pause();
+        vm.prank(minter);
+        local.mintEarned(player, 1);
+        assertTrue(local.paused());
+        assertEq(local.balanceOf(player, SKIN_COUNT + 1), 1);
+
+        uint256[] memory earned = local.earnedBalancesOf(player);
+        assertEq(earned.length, earnedCount);
+        assertEq(earned[0], 1);
+        assertEq(earned[1], 1);
+        uint256[] memory paid = local.balancesOf(player);
+        assertEq(paid.length, SKIN_COUNT);
+        assertEq(paid[0], 0);
+
+        vm.prank(player);
+        local.safeTransferFrom(player, owner, SKIN_COUNT, 1, "");
+        assertEq(local.balanceOf(player, SKIN_COUNT), 0);
+        assertEq(local.balanceOf(owner, SKIN_COUNT), 1);
+        assertEq(local.earnedBalancesOf(owner)[0], 1);
+        assertEq(local.earnedBalancesOf(player)[0], 0);
     }
 
     function _mintSkin(address account, uint256 skinId, uint256 amount) internal {

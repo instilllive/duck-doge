@@ -36,5 +36,32 @@ jobs:
           --exclude-tests
           --no-match-coverage script
 
-      - name: Require 100% mint, pause, and withdraw coverage
+      - name: Require 100% paid mint and earned minter coverage
         run: python3 ci/check_skin_coverage.py lcov.info
+
+      - name: Require 100% vouch, revoke, and weekly limit coverage
+        run: python3 ci/check_vouch_coverage.py lcov.info
+
+  web:
+    name: web unit tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
